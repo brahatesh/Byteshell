@@ -27,4 +27,6 @@ make -f makefile
 - `-c` command line option to execute commands without launching the shell
 
 ## Video demonstration
-<div style="position: relative; padding-bottom: 55.55555555555556%; height: 0;"><iframe src="https://www.loom.com/embed/a17feb63b64c4994aee26e6b52f2f9b0?sid=9eefb4af-a8cd-4e51-ba8e-facd0f91a1a7" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></iframe></div>
+
+[![Video Demo](https://github.com/brahatesh/Byteshell/assets/76239328/99374138-e38e-421e-b076-2dea78999f18)](https://github.com/brahatesh/Byteshell/assets/76239328/0efed324-5d6c-44f8-8ef1-7971bcbdf0cf)
+
