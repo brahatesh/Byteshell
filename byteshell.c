@@ -64,10 +64,10 @@ bool is_builtin_enabled[] = {
     false,   // help
     true,   // exit
     true,   // pwd
-    false,   // builtin
-    false,   // command
-    false,   // echo
-    false    // enable
+    true,   // builtin
+    true,   // command
+    true,   // echo
+    true    // enable
 };
 
 int num_builtins() {
@@ -99,7 +99,8 @@ const char *argp_program_version = "ByteShell v0.1";
 static int parse_opt(int key, char *arg, struct argp_state *state) {
     switch(key) {
         case 'c':
-            printf("%s\n",arg);
+            exec_line(arg);
+            exit(__LAST_EXIT_STATUS__);
             break;
     }
     return 0;
@@ -327,7 +328,7 @@ int exec_cmd(int argc, char **argv) {
             return (*builtin_func[i])(argc, argv);
         }
     }
-    return launch(argv);  
+    return launch(argv);
 }
 
 int byteshell_cd(int argc, char** argv) {
@@ -432,19 +433,40 @@ int byteshell_pwd(int argc, char** argv) {
 }
 
 int byteshell_builtin(int argc, char** argv) {
-    return 0;
+    for(int i=0; i<num_builtins(); i++) {
+        if(strcmp(argv[1], builtin_str[i])==0 && is_builtin_enabled[i]) {
+            return (*builtin_func[i])(argc-1, argv+1);
+        }
+    }
+    fprintf(stderr, "byteshell: builtin: %s: not a shell builtin\n", argv[1]);
+    __LAST_EXIT_STATUS__ = EXIT_FAILURE;
+    return 1;
 }
 
 int byteshell_command(int argc, char** argv) {
-    return 0;
+    return launch(argv+1);
 }
 
 int byteshell_echo(int argc, char** argv) {
-    return 0;
+    for(int i=1; i<argc-1; i++) {
+        printf("%s ", argv[i]);
+    }
+    printf("%s\n", argv[argc-1]);
+    __LAST_EXIT_STATUS__ = EXIT_SUCCESS;
+    return 1;
 }
 
 int byteshell_enable(int argc, char** argv) {
-    return 0;
+    for(int i=0; i<num_builtins(); i++) {
+        if(strcmp(argv[1], builtin_str[i])==0) {
+            is_builtin_enabled[i] = true;
+            __LAST_EXIT_STATUS__ = EXIT_SUCCESS;
+            return 1;
+        }
+    }
+    fprintf(stderr, "byteshell: builtin: %s: not a shell builtin\n", argv[1]);
+    __LAST_EXIT_STATUS__ = EXIT_FAILURE;
+    return 1;
 }
 
 // struct token* extract_tokens_quotes(struct token *tokens, int *sz) {
