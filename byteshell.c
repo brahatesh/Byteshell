@@ -189,7 +189,85 @@ char* extract_command(char* line) {
 }
 
 int pipe_exec(char* command) {
-    return 0;
+    int num_pipes = 0, command_c = 0;
+    for(int i=1; i<strlen(command); i++) {
+        if(command[i]=='|') {
+            if(command[i-1]=='|') {
+                fprintf(stderr, "byteshell: OR operation is not supported\n");
+                __LAST_EXIT_STATUS__ = EXIT_FAILURE;
+                return 1;
+            }
+            else num_pipes++;
+        }
+    }
+    int end = strlen(command)-1, start = 0;
+    while(command[end]==' '||command[end]=='\n') end--;
+    while(command[start]==' ') start++;
+    if(command[end]=='|'||command[start]=='|') {
+        fprintf(stderr, "byteshell: incomplete command\n");
+        __LAST_EXIT_STATUS__ = EXIT_FAILURE;
+        return 1;
+    }
+    int pipefds[2*num_pipes];
+    char *save_ptr, *sub_cmd = strtok_r(command, "|", &save_ptr);
+    for(int i=0; i<num_pipes; i++) {
+        if(pipe(pipefds+(i*2)) < 0) {
+            perror("byteshell");
+            __LAST_EXIT_STATUS__ = EXIT_FAILURE;
+            return 1;
+        }
+    }
+
+    int status, exit_status = EXIT_SUCCESS;
+    pid_t *pids = (pid_t*)malloc((num_pipes+1)*sizeof(pid_t)), wpid;
+    if(!pids) {
+        fprintf(stderr, "byteshell: Allocation error\n");
+        exit(EXIT_FAILURE);
+    }
+    do {
+        pid_t pid = fork();
+        if(pid==0) {
+            if(command_c!=0) {
+                if(dup2(pipefds[(command_c-1)*2],0) < 0) {
+                    perror("byteshell");
+                    exit(EXIT_FAILURE);
+                }
+            }
+            if(command_c!=num_pipes) {
+                if(dup2(pipefds[command_c*2+1],1) < 0) {
+                    perror("byteshell");
+                    exit(EXIT_FAILURE);
+                }
+            }
+            for(int i=0; i < 2*num_pipes; i++) {
+                close(pipefds[i]);
+            }
+            int argc = 0;
+            char **argv = split_command(sub_cmd, &argc);
+            if(execvp(argv[0], argv) == -1) {
+                perror("byteshell");
+            }
+            exit(EXIT_FAILURE);
+        }
+        else if(pid<0) {
+            perror("byteshell");
+            __LAST_EXIT_STATUS__ = EXIT_FAILURE;
+            return 1;
+        }
+        pids[command_c] = pid;
+        command_c++;
+    } while(command_c < num_pipes+1 && (sub_cmd=strtok_r(NULL,"|",&save_ptr)));
+    for(int i=0; i<2*num_pipes; i++) {
+        close(pipefds[i]);
+    }
+    for(int i=0; i<num_pipes+1; i++) {
+        do {
+            wpid = waitpid(pids[i], &status, WUNTRACED);
+        } while(!WIFEXITED(status) && !WIFSIGNALED(status));
+        if(WEXITSTATUS(status)!=EXIT_SUCCESS) exit_status = WEXITSTATUS(status);
+    }
+    __LAST_EXIT_STATUS__ = exit_status;
+    return 1;
 }
 
 char** split_command(char *command, int *num_tokens) {
@@ -233,6 +311,8 @@ int launch(char **args) {
     }
     else if (pid < 0) {
         perror("byteshell");
+        __LAST_EXIT_STATUS__ = EXIT_FAILURE;
+        return 1;
     } else {
         do {
             wpid = waitpid(pid, &status, WUNTRACED);
@@ -258,14 +338,14 @@ int byteshell_cd(int argc, char** argv) {
     if(argc==1) {
         if(chdir(getenv("HOME"))<0) {
             fprintf(stderr, "byteshell: cd: %s: No such file or directory\n", getenv("HOME"));
-            __LAST_EXIT_STATUS__ = 1;
+            __LAST_EXIT_STATUS__ = EXIT_FAILURE;
             return 1;
         }
         else {
             if(getcwd(__CWD__, CWD_LEN) == NULL) {
                 strcpy(__CWD__, "<unknown>");
             }
-            __LAST_EXIT_STATUS__ = 0;
+            __LAST_EXIT_STATUS__ = EXIT_SUCCESS;
             return 1;
         }
     }
@@ -278,7 +358,7 @@ HOME shell variable.\n\
 \n\
 OPTIONS:\n\
 --help \t Prints this help menu\n");
-        __LAST_EXIT_STATUS__ = 0;
+        __LAST_EXIT_STATUS__ = EXIT_SUCCESS;
         return 1;
     }
 
@@ -289,28 +369,28 @@ OPTIONS:\n\
 Usage: cd [--help|DIR]\n", 
             argv[1]
         );
-        __LAST_EXIT_STATUS__ = 1;
+        __LAST_EXIT_STATUS__ = EXIT_FAILURE;
         return 1;
     }
     if(argc>2) {
         fprintf(stderr, "byteshell: cd: too many arguments\n");
-        __LAST_EXIT_STATUS__ = 1;
+        __LAST_EXIT_STATUS__ = EXIT_FAILURE;
         return 1;
     }
 
     if(chdir(argv[1])<0) {
         fprintf(stderr, "byteshell: cd: %s: No such file or directory\n", argv[1]);
-        __LAST_EXIT_STATUS__ = 1;
+        __LAST_EXIT_STATUS__ = EXIT_FAILURE;
         return 1;
     }
     else {
         if(getcwd(__CWD__, CWD_LEN) == NULL) {
             strcpy(__CWD__, "<unknown>");
         }
-        __LAST_EXIT_STATUS__ = 0;
+        __LAST_EXIT_STATUS__ = EXIT_SUCCESS;
         return 1;
     }
-    __LAST_EXIT_STATUS__ = 1;
+    __LAST_EXIT_STATUS__ = EXIT_FAILURE;
     return 1;
 }
 
@@ -321,7 +401,7 @@ int byteshell_help(int argc, char** argv) {
 int byteshell_exit(int argc, char** argv) {
     if(argc>2) {
         fprintf(stderr, "byteshell: exit: too many arguments\n");
-        __LAST_EXIT_STATUS__ = 1;
+        __LAST_EXIT_STATUS__ = EXIT_FAILURE;
         return 1;
     }
     else if(argc==1) {
@@ -333,8 +413,8 @@ int byteshell_exit(int argc, char** argv) {
         is_arg_num = is_arg_num && isdigit(argv[1][i]);
     }
     if(!is_arg_num) {
-        fprintf(stderr, "byteshell: exit: invalid argument\n");
-        __LAST_EXIT_STATUS__ = 1;
+        fprintf(stderr, "byteshell: exit: numeric argument required\n");
+        __LAST_EXIT_STATUS__ = EXIT_FAILURE;
         return 1;
     }
     if(atoi(argv[1])==EXIT_SUCCESS) printf("Goodbye! :)\n");
