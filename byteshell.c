@@ -219,11 +219,7 @@ int pipe_exec(char* command) {
     }
 
     int status, exit_status = EXIT_SUCCESS;
-    pid_t *pids = (pid_t*)malloc((num_pipes+1)*sizeof(pid_t)), wpid;
-    if(!pids) {
-        fprintf(stderr, "byteshell: Allocation error\n");
-        exit(EXIT_FAILURE);
-    }
+    pid_t pids[num_pipes+1], wpid;
     do {
         pid_t pid = fork();
         if(pid==0) {
